@@ -1,4 +1,4 @@
-import JenaClient from '../utils/jena-client.js';
+import {JenaClient} from './jena-client.js';
 
 /**
  * MCP Tool to execute a SPARQL query against Apache Jena

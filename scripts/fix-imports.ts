@@ -3,26 +3,26 @@
  * with the correct file extensions after compilation.
  */
 
-import { readFileSync, writeFileSync, readdirSync } from 'fs';
+import { readFileSync, writeFileSync, readdirSync, Dirent } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 // Get current directory
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const distDir = join(__dirname, '..', 'dist');
+const __filename: string = fileURLToPath(import.meta.url);
+const __dirname: string = dirname(__filename);
+const distDir: string = join(__dirname, '..', 'dist');
 
 /**
  * Process a JavaScript file to ensure imports have the correct extension
  */
-function processFile(filePath) {
+function processFile(filePath: string): void {
   try {
-    let content = readFileSync(filePath, 'utf8');
+    let content: string = readFileSync(filePath, 'utf8');
     
     // Fix TypeScript imports that are missing .js extension
     content = content.replace(
       /from\s+["']([^"']+)["']/g,
-      (match, importPath) => {
+      (match: string, importPath: string): string => {
         // Skip external modules and imports that already have extensions
         if (importPath.startsWith('.') && !importPath.endsWith('.js')) {
           return `from "${importPath}.js"`;
@@ -41,11 +41,11 @@ function processFile(filePath) {
 /**
  * Recursively process all JavaScript files in a directory
  */
-function processDirectory(dir) {
-  const files = readdirSync(dir, { withFileTypes: true });
+function processDirectory(dir: string): void {
+  const files: Dirent[] = readdirSync(dir, { withFileTypes: true });
   
   for (const file of files) {
-    const path = join(dir, file.name);
+    const path: string = join(dir, file.name);
     
     if (file.isDirectory()) {
       processDirectory(path);

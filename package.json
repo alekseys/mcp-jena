@@ -9,7 +9,7 @@
     "dev": "ts-node --esm src/index.ts",
     "dev:transpile": "ts-node --transpile-only --esm src/index.ts",
     "build": "tsc",
-    "postbuild": "node scripts/fix-imports.js",
+    "postbuild": "ts-node --esm scripts/fix-imports.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
