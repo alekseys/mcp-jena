@@ -1,5 +1,6 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { SparqlHelper } from './sparql-helper.js';
 
 dotenv.config();
 
@@ -62,6 +63,22 @@ export class JenaClient {
    */
   async executeQuery(sparqlQuery: string): Promise<SparqlResult> {
     try {
+      // Validate query before execution
+      const validation = SparqlHelper.validateQuery(sparqlQuery);
+      if (!validation.valid) {
+        const errorMsg = `Invalid SPARQL query:\n${validation.errors.join('\n')}`;
+        const suggestions = validation.suggestions.length > 0 
+          ? `\n\nSuggestions:\n${validation.suggestions.join('\n')}` 
+          : '';
+        throw new Error(errorMsg + suggestions);
+      }
+
+      // Add performance suggestions as warnings (but don't block execution)
+      const improvements = SparqlHelper.suggestImprovements(sparqlQuery);
+      if (improvements.length > 0) {
+        console.warn('💡 Query suggestions:', improvements.join(', '));
+      }
+
       const config: any = {
         params: {
           query: sparqlQuery,
@@ -84,7 +101,11 @@ export class JenaClient {
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        throw new Error(`SPARQL query failed: ${error.message}. ${error.response?.data?.message || ''}`);
+        const enhancedError = SparqlHelper.enhanceErrorMessage(
+          `SPARQL query failed: ${error.message}. ${error.response?.data?.message || ''}`,
+          sparqlQuery
+        );
+        throw new Error(enhancedError);
       }
       throw error;
     }
@@ -97,6 +118,16 @@ export class JenaClient {
    */
   async executeUpdate(sparqlUpdate: string): Promise<string> {
     try {
+      // Basic validation for update queries
+      const validation = SparqlHelper.validateQuery(sparqlUpdate);
+      if (!validation.valid) {
+        const errorMsg = `Invalid SPARQL update:\n${validation.errors.join('\n')}`;
+        const suggestions = validation.suggestions.length > 0 
+          ? `\n\nSuggestions:\n${validation.suggestions.join('\n')}` 
+          : '';
+        throw new Error(errorMsg + suggestions);
+      }
+
       const config: any = {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -120,7 +151,11 @@ export class JenaClient {
       return 'Update successful';
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        throw new Error(`SPARQL update failed: ${error.message}. ${error.response?.data?.message || ''}`);
+        const enhancedError = SparqlHelper.enhanceErrorMessage(
+          `SPARQL update failed: ${error.message}. ${error.response?.data?.message || ''}`,
+          sparqlUpdate
+        );
+        throw new Error(enhancedError);
       }
       throw error;
     }

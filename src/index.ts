@@ -50,13 +50,47 @@ if (jenaUsername) {
 const toolSchemas = [
   {
     name: "execute_sparql_query",
-    description: "Execute a SPARQL query against an Apache Jena dataset",
+    description: `Execute a SPARQL query against an Apache Jena dataset.
+
+SPARQL (SPARQL Protocol and RDF Query Language) is a query language for RDF data.
+
+Key SPARQL Query Forms:
+- SELECT: Returns variable bindings as a table
+- CONSTRUCT: Returns RDF triples  
+- ASK: Returns true/false
+- DESCRIBE: Returns RDF description of resources
+
+Basic SPARQL Syntax:
+- PREFIX declarations: PREFIX ex: <http://example.org/>
+- WHERE clause with triple patterns: ?subject ?predicate ?object
+- Optional patterns: OPTIONAL { ?s ?p ?o }
+- Filters: FILTER(?var > 10)
+- Graph patterns: GRAPH <uri> { ?s ?p ?o }
+- Property paths: ?s ex:knows/ex:friend ?o (sequence), ?s ex:knows* ?o (zero or more)
+
+Common Query Templates:
+1. Basic exploration: SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10
+2. Count triples: SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }
+3. List types: SELECT DISTINCT ?type WHERE { ?s a ?type }
+4. Property path (friends of friends): SELECT ?person ?friend WHERE { ?person foaf:knows/foaf:knows ?friend }
+5. Optional properties: SELECT ?s ?name WHERE { ?s a ex:Person . OPTIONAL { ?s foaf:name ?name } }
+6. Named graph query: SELECT ?s ?p ?o FROM NAMED <graph> WHERE { GRAPH <graph> { ?s ?p ?o } }
+7. Filter by value: SELECT ?s WHERE { ?s ex:age ?age . FILTER(?age > 18) }
+
+Property Path Operators:
+- / (sequence): ?s foaf:knows/foaf:name ?name
+- | (alternative): ?s (foaf:name|rdfs:label) ?name  
+- * (zero or more): ?s foaf:knows* ?connected
+- + (one or more): ?s ex:partOf+ ?container
+- ? (zero or one): ?s foaf:knows? ?maybeKnown
+- ^ (inverse): ?s ^ex:hasChild ?parent (equivalent to ?parent ex:hasChild ?s)
+- ! (negation): ?s !(rdf:type) ?notType`,
     inputSchema: {
       type: "object",
       properties: {
         query: { 
           type: "string",
-          description: "The SPARQL query to execute",
+          description: "The SPARQL query to execute. Must be valid SPARQL syntax (SELECT, CONSTRUCT, ASK, or DESCRIBE). Use property paths for complex graph navigation.",
         },
         dataset: { 
           type: "string",
@@ -68,13 +102,34 @@ const toolSchemas = [
   },
   {
     name: "execute_sparql_update",
-    description: "Execute a SPARQL update query against an Apache Jena dataset",
+    description: `Execute a SPARQL update query against an Apache Jena dataset.
+
+SPARQL Update Operations:
+- INSERT DATA: Add triples to the dataset
+- DELETE DATA: Remove specific triples  
+- INSERT/DELETE WHERE: Conditional insert/delete based on patterns
+- LOAD/CLEAR: Load/clear entire graphs
+- CREATE/DROP: Manage graph lifecycle
+
+Basic Update Syntax:
+- INSERT DATA { <subject> <predicate> <object> }
+- DELETE DATA { <subject> <predicate> <object> }
+- INSERT { ?s <new:prop> "value" } WHERE { ?s <old:prop> ?o }
+- DELETE { ?s <old:prop> ?o } WHERE { ?s <old:prop> ?o }
+- CLEAR GRAPH <graph-uri>
+
+Example Updates:
+1. Insert data: INSERT DATA { <ex:person1> foaf:name "John" ; ex:age 25 }
+2. Delete data: DELETE DATA { <ex:person1> ex:age 25 }
+3. Conditional update: DELETE { ?p ex:status "pending" } INSERT { ?p ex:status "active" } WHERE { ?p ex:status "pending" }
+4. Insert with graph: INSERT DATA { GRAPH <ex:metadata> { <ex:dataset1> dcterms:created "2024-01-01"^^xsd:date } }
+5. Clear graph: CLEAR GRAPH <ex:temporary>`,
     inputSchema: {
       type: "object",
       properties: {
         update: { 
           type: "string",
-          description: "The SPARQL update query to execute",
+          description: "The SPARQL update query to execute. Must be valid SPARQL update syntax (INSERT, DELETE, LOAD, CLEAR, CREATE, DROP).",
         },
         dataset: { 
           type: "string",
@@ -86,7 +141,22 @@ const toolSchemas = [
   },
   {
     name: "list_graphs",
-    description: "List all available named graphs in an Apache Jena dataset",
+    description: `List all available named graphs in an Apache Jena dataset.
+
+Named graphs in RDF provide context and provenance for triples. Each graph is identified by a URI.
+This tool helps discover what data contexts are available in your dataset.
+
+Common Graph Patterns:
+- Default graph (unnamed): Contains triples not in any specific graph
+- Named graphs: <http://example.org/graph1>, <http://data.gov/dataset1>  
+- Metadata graphs: Often contain information about other graphs
+- Versioned graphs: <http://data.org/v1>, <http://data.org/v2>
+
+Use Case Examples:
+- Data provenance: Track where data came from
+- Temporal data: Different time periods in separate graphs
+- Access control: Different permissions per graph
+- Data quality: Separate validated vs raw data`,
     inputSchema: {
       type: "object",
       properties: {
@@ -95,6 +165,30 @@ const toolSchemas = [
           description: "Dataset name. If not provided, uses the default dataset.",
         },
       },
+    },
+  },
+  {
+    name: "sparql_query_templates",
+    description: `Get SPARQL query templates for common knowledge graph exploration patterns.
+
+This tool provides pre-built SPARQL query templates covering:
+- Basic data exploration and statistics
+- Property path navigation for complex relationships
+- Knowledge graph analysis patterns
+- Data validation and quality checks
+- Schema discovery and documentation
+
+Templates include explanations and can be customized with your specific URIs and requirements.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          enum: ["exploration", "property-paths", "statistics", "validation", "schema", "all"],
+          description: "Category of templates to retrieve. 'all' returns all available templates.",
+        },
+      },
+      required: ["category"],
     },
   },
 ];
@@ -173,6 +267,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       return {
         content: [{ type: "text", text: JSON.stringify(graphs, null, 2) }],
+        isError: false,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: "text", text: errorMessage }],
+        isError: true,
+      };
+    }
+  }
+  else if (request.params.name === "sparql_query_templates") {
+    const category = request.params.arguments?.category as string || "all";
+    
+    try {
+      const { SparqlTemplates } = await import("./utils/sparql-templates.js");
+      const templates = SparqlTemplates.getTemplates(category);
+      
+      return {
+        content: [{ type: "text", text: JSON.stringify(templates, null, 2) }],
         isError: false,
       };
     } catch (error) {

@@ -84,9 +84,28 @@ docker run -e JENA_FUSEKI_URL=http://your-jena-server:3030 -e DEFAULT_DATASET=yo
 
 This MCP server provides the following tools:
 
-1. `execute_sparql_query` - Execute a SPARQL query against the Jena dataset
-2. `execute_sparql_update` - Execute a SPARQL update query to modify the dataset
-3. `list_graphs` - List all available named graphs in the dataset
+1. **`execute_sparql_query`** - Execute a SPARQL query against the Jena dataset
+   - Includes comprehensive SPARQL syntax documentation
+   - Property path operators (/, *, +, ?, ^, |) with examples
+   - Common query patterns and templates
+   - Automatic query validation and suggestions
+
+2. **`execute_sparql_update`** - Execute a SPARQL update query to modify the dataset  
+   - Insert/Delete operations documentation
+   - Conditional updates with WHERE clauses
+   - Graph management operations
+
+3. **`list_graphs`** - List all available named graphs in the dataset
+   - Graph usage patterns and best practices
+   - Provenance and versioning examples
+
+4. **`sparql_query_templates`** - Get pre-built SPARQL query templates
+   - **exploration**: Basic data discovery and statistics
+   - **property-paths**: Complex graph navigation patterns  
+   - **statistics**: Knowledge graph metrics and analysis
+   - **validation**: Data quality and consistency checks
+   - **schema**: Structure discovery and documentation
+
 
 ## Environment Variables
 
