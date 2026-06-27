@@ -8,6 +8,15 @@ const FUSEKI_URL = process.env.JENA_FUSEKI_URL || 'http://localhost:3030';
 const DEFAULT_DATASET = process.env.DEFAULT_DATASET || 'ds';
 const JENA_USERNAME = process.env.JENA_USERNAME || '';
 const JENA_PASSWORD = process.env.JENA_PASSWORD || '';
+// Optional explicit endpoint paths (e.g. for an embedded Jena app instead of Fuseki).
+// When set, these override the default Fuseki-style `${dataset}/query` and `${dataset}/update` layout.
+const QUERY_PATH = process.env.JENA_QUERY_PATH || '';
+const UPDATE_PATH = process.env.JENA_UPDATE_PATH || '';
+// Wire protocol: 'fuseki' (standard SPARQL protocol) or 'json' (embedded app that
+// accepts {"sparql": "..."} JSON bodies and wraps results under a `results` field).
+const PROTOCOL = (process.env.JENA_PROTOCOL || 'fuseki') as JenaProtocol;
+
+export type JenaProtocol = 'fuseki' | 'json';
 
 /**
  * Represents the result of a SPARQL query
@@ -36,24 +45,41 @@ export class JenaClient {
   private dataset: string;
   private username: string;
   private password: string;
+  private queryUrl: string;
+  private updateUrl: string;
+  private protocol: JenaProtocol;
 
   /**
    * Creates a new Jena client
-   * @param baseUrl - Jena Fuseki server URL. Defaults to environment variable or 'http://localhost:3030'
-   * @param dataset - Dataset name. Defaults to environment variable or 'ds'
+   * @param baseUrl - Jena server URL. Defaults to environment variable or 'http://localhost:3030'
+   * @param dataset - Dataset name (Fuseki layout only). Defaults to environment variable or 'ds'
    * @param username - Username for HTTP Basic authentication. Defaults to environment variable
    * @param password - Password for HTTP Basic authentication. Defaults to environment variable
+   * @param queryPath - Explicit SPARQL query path. When set, overrides the Fuseki `${dataset}/query` layout
+   * @param updatePath - Explicit SPARQL update path. When set, overrides the Fuseki `${dataset}/update` layout
+   * @param protocol - Wire protocol: 'fuseki' (standard) or 'json' (embedded app JSON envelope)
    */
   constructor(
     baseUrl = FUSEKI_URL, 
     dataset = DEFAULT_DATASET, 
     username = JENA_USERNAME, 
-    password = JENA_PASSWORD
+    password = JENA_PASSWORD,
+    queryPath = QUERY_PATH,
+    updatePath = UPDATE_PATH,
+    protocol: JenaProtocol = PROTOCOL
   ) {
-    this.baseUrl = baseUrl;
+    this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.dataset = dataset;
     this.username = username;
     this.password = password;
+    this.protocol = protocol;
+    // Use explicit paths when provided (embedded Jena app); otherwise default to Fuseki layout.
+    this.queryUrl = queryPath
+      ? `${this.baseUrl}/${queryPath.replace(/^\/+/, '')}`
+      : `${this.baseUrl}/${this.dataset}/query`;
+    this.updateUrl = updatePath
+      ? `${this.baseUrl}/${updatePath.replace(/^\/+/, '')}`
+      : `${this.baseUrl}/${this.dataset}/update`;
   }
 
   /**
@@ -79,6 +105,28 @@ export class JenaClient {
         console.warn('💡 Query suggestions:', improvements.join(', '));
       }
 
+      // Embedded Jena app: POST {"sparql": ...} as JSON, results wrapped in an envelope.
+      if (this.protocol === 'json') {
+        const config: any = {
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+        };
+        if (this.username && this.password) {
+          config.auth = { username: this.username, password: this.password };
+        }
+
+        const response = await axios.post(this.queryUrl, { sparql: sparqlQuery }, config);
+        const data = response.data;
+        if (data && data.error) {
+          throw new Error(
+            SparqlHelper.enhanceErrorMessage(`SPARQL query failed: ${data.error}`, sparqlQuery)
+          );
+        }
+        return data.results as SparqlResult;
+      }
+
       const config: any = {
         params: {
           query: sparqlQuery,
@@ -96,7 +144,7 @@ export class JenaClient {
         };
       }
 
-      const response = await axios.get(`${this.baseUrl}/${this.dataset}/query`, config);
+      const response = await axios.get(this.queryUrl, config);
 
       return response.data;
     } catch (error) {
@@ -128,6 +176,28 @@ export class JenaClient {
         throw new Error(errorMsg + suggestions);
       }
 
+      // Embedded Jena app: POST {"sparql": ...} as JSON.
+      if (this.protocol === 'json') {
+        const config: any = {
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+        };
+        if (this.username && this.password) {
+          config.auth = { username: this.username, password: this.password };
+        }
+
+        const response = await axios.post(this.updateUrl, { sparql: sparqlUpdate }, config);
+        const data = response.data;
+        if (data && data.error) {
+          throw new Error(
+            SparqlHelper.enhanceErrorMessage(`SPARQL update failed: ${data.error}`, sparqlUpdate)
+          );
+        }
+        return 'Update successful';
+      }
+
       const config: any = {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -143,7 +213,7 @@ export class JenaClient {
       }
 
       await axios.post(
-        `${this.baseUrl}/${this.dataset}/update`,
+        this.updateUrl,
         new URLSearchParams({ update: sparqlUpdate }),
         config
       );

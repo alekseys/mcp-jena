@@ -6,7 +6,12 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { createRequire } from "module";
 import JenaClient from "./utils/jena-client.js";
+
+// Load package metadata so the server version stays in sync with package.json.
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json") as { name: string; version: string; description: string };
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -14,6 +19,11 @@ let jenaEndpoint = process.env.JENA_FUSEKI_URL || "http://localhost:3030";
 let defaultDataset = process.env.DEFAULT_DATASET || "ds";
 let jenaUsername = process.env.JENA_USERNAME || "";
 let jenaPassword = process.env.JENA_PASSWORD || "";
+// Optional explicit endpoint paths for an embedded Jena app (non-Fuseki layout).
+let queryPath = process.env.JENA_QUERY_PATH || "";
+let updatePath = process.env.JENA_UPDATE_PATH || "";
+// Wire protocol: 'fuseki' (default) or 'json' (embedded app JSON envelope).
+let protocol = process.env.JENA_PROTOCOL || "fuseki";
 
 // Process CLI arguments
 for (let i = 0; i < args.length; i++) {
@@ -37,11 +47,34 @@ for (let i = 0; i < args.length; i++) {
       jenaPassword = args[i + 1];
       i++; // Skip the next arg since we used it
     }
+  } else if (args[i] === "--query-path") {
+    if (i + 1 < args.length) {
+      queryPath = args[i + 1];
+      i++; // Skip the next arg since we used it
+    }
+  } else if (args[i] === "--update-path") {
+    if (i + 1 < args.length) {
+      updatePath = args[i + 1];
+      i++; // Skip the next arg since we used it
+    }
+  } else if (args[i] === "--protocol") {
+    if (i + 1 < args.length) {
+      protocol = args[i + 1];
+      i++; // Skip the next arg since we used it
+    }
+  } else if (args[i] === "--json") {
+    protocol = "json";
   }
 }
 
 console.log(`Connecting to Jena endpoint: ${jenaEndpoint}`);
-console.log(`Using default dataset: ${defaultDataset}`);
+console.log(`Using protocol: ${protocol}`);
+if (queryPath || updatePath) {
+  console.log(`Using query path: ${queryPath || `${defaultDataset}/query`}`);
+  console.log(`Using update path: ${updatePath || `${defaultDataset}/update`}`);
+} else {
+  console.log(`Using default dataset: ${defaultDataset}`);
+}
 if (jenaUsername) {
   console.log(`Using authentication for user: ${jenaUsername}`);
 }
@@ -196,8 +229,8 @@ Templates include explanations and can be customized with your specific URIs and
 // Create server with proper metadata and capabilities
 const server = new Server(
   {
-    name: "mcp-jena",
-    version: "1.0.0",
+    name: pkg.name,
+    version: pkg.version,
     description: "MCP server for Apache Jena SPARQL queries",
     vendor: "ramuzes",
     schemas: {
@@ -223,7 +256,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const dataset = request.params.arguments?.dataset as string | undefined || defaultDataset;
     
     try {
-      const client = new JenaClient(jenaEndpoint, dataset, jenaUsername, jenaPassword);
+      const client = new JenaClient(jenaEndpoint, dataset, jenaUsername, jenaPassword, queryPath, updatePath, protocol as any);
       const result = await client.executeQuery(query);
       
       return {
@@ -243,7 +276,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const dataset = request.params.arguments?.dataset as string | undefined || defaultDataset;
     
     try {
-      const client = new JenaClient(jenaEndpoint, dataset, jenaUsername, jenaPassword);
+      const client = new JenaClient(jenaEndpoint, dataset, jenaUsername, jenaPassword, queryPath, updatePath, protocol as any);
       const result = await client.executeUpdate(update);
       
       return {
@@ -262,7 +295,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const dataset = request.params.arguments?.dataset as string | undefined || defaultDataset;
     
     try {
-      const client = new JenaClient(jenaEndpoint, dataset, jenaUsername, jenaPassword);
+      const client = new JenaClient(jenaEndpoint, dataset, jenaUsername, jenaPassword, queryPath, updatePath, protocol as any);
       const graphs = await client.listGraphs();
       
       return {
