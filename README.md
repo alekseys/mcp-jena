@@ -13,6 +13,9 @@ This project implements an MCP server that allows AI agents (such as Cursor, Cla
 - List available named graphs in the dataset
 - HTTP Basic authentication support for Jena Fuseki
 - Compatible with the Model Context Protocol
+- Two MCP transports:
+  - **stdio** (default) for local clients such as Cursor, Cline, or Claude Desktop
+  - **Streamable HTTP** for remote clients that reach the server over the network (e.g. Microsoft Foundry IQ)
 
 ## Prerequisites
 
@@ -64,7 +67,44 @@ For development mode with automatic transpilation:
 npm run dev:transpile -- -e http://your-jena-server:3030 -d your_dataset -u your_username -p your_password
 ```
 
-## Docker
+## Transports
+
+The server can run over either **stdio** (default) or **Streamable HTTP**.
+
+### stdio (local clients)
+
+Used by desktop MCP clients (Cursor, Cline, Claude Desktop). This is the default,
+so `npm start` runs in stdio mode.
+
+### Streamable HTTP (remote clients, e.g. Microsoft Foundry IQ)
+
+Microsoft Foundry IQ consumes remote MCP servers over HTTP, so the server must be
+reachable on the network. Start it in HTTP mode:
+
+```
+npm run build
+npm run start:http
+```
+
+or equivalently:
+
+```
+MCP_TRANSPORT=http PORT=8080 API_KEY=your-secret node dist/index.js
+# or
+node dist/index.js --http --port 8080
+```
+
+The MCP endpoint is served at `POST /mcp` (with `GET`/`DELETE /mcp` for the
+Steamable HTTP session lifecycle). A liveness probe is available at `GET /health`.
+
+When `API_KEY` is set, HTTP clients must authenticate by sending either:
+
+- `Authorization: Bearer <API_KEY>`, or
+- `x-api-key: <API_KEY>`
+
+Point Foundry IQ at `https://<your-host>/mcp` and configure the API key as the
+bearer token. If `API_KEY` is not set, the HTTP endpoint is unauthenticated
+(only do this behind a trusted network / gateway).
 
 You can run the MCP Jena server using Docker:
 
@@ -79,6 +119,21 @@ docker build -t mcp-jena .
 ```bash
 docker run -e JENA_FUSEKI_URL=http://your-jena-server:3030 -e DEFAULT_DATASET=your_dataset mcp-jena
 ```
+
+The Docker image defaults to the **Streamable HTTP** transport on port `8080`
+(suitable for remote clients such as Foundry IQ). Publish the port and set an
+API key:
+
+```bash
+docker run -p 8080:8080 \
+  -e JENA_FUSEKI_URL=http://your-jena-server:3030 \
+  -e DEFAULT_DATASET=your_dataset \
+  -e API_KEY=your-secret \
+  mcp-jena
+```
+
+To run over stdio inside the container instead, override the transport with
+`-e MCP_TRANSPORT=stdio` (or pass `--stdio` as a command argument).
 
 ## Available Tools
 
@@ -115,8 +170,9 @@ You can also configure the server using environment variables:
 - `DEFAULT_DATASET`: Default dataset name (default: ds)
 - `JENA_USERNAME`: Username for HTTP Basic authentication to Jena Fuseki
 - `JENA_PASSWORD`: Password for HTTP Basic authentication to Jena Fuseki
-- `PORT`: Port for the MCP server (for HTTP transport, default: 8080)
-- `API_KEY`: API key for MCP server authentication
+- `MCP_TRANSPORT`: MCP transport to use, `stdio` (default) or `http`
+- `PORT`: Port for the HTTP transport (default: 8080)
+- `API_KEY`: Optional shared secret for HTTP transport authentication (Bearer token or `x-api-key`)
 
 ## Example SPARQL Queries
 

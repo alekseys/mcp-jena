@@ -10,7 +10,6 @@ RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Copy source code and build configuration
 COPY tsconfig.json ./
-COPY scripts ./scripts
 COPY src ./src
 
 # Build the application
@@ -34,11 +33,16 @@ COPY --from=builder /app/dist ./dist
 ENV JENA_FUSEKI_URL=http://fuseki:3030
 ENV DEFAULT_DATASET=ds
 
-# Expose the MCP server - adjust port if needed
-# Note: MCP server uses stdin/stdout by default, not TCP ports
+# Serve over Streamable HTTP so remote MCP clients (e.g. Microsoft Foundry IQ)
+# can reach the server over the network.
+ENV MCP_TRANSPORT=http
+ENV PORT=8080
+
+# Expose the Streamable HTTP port (MCP endpoint is served at POST /mcp)
+EXPOSE 8080
 
 # Set entrypoint
 ENTRYPOINT ["node", "dist/index.js"]
 
-# Optionally, you can add command line arguments here
-# CMD ["--endpoint", "http://fuseki:3030", "--dataset", "ds"] 
+# To run over stdio instead, override the transport:
+# CMD ["--stdio", "--endpoint", "http://fuseki:3030", "--dataset", "ds"] 
