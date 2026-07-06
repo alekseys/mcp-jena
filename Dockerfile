@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # Install dependencies
-RUN --mount=type=cache,target=/root/.npm npm ci
+RUN npm ci
 
 # Copy source code and build configuration
 COPY tsconfig.json ./
@@ -24,7 +24,7 @@ COPY package.json package-lock.json ./
 
 # Install production dependencies only
 ENV NODE_ENV=production
-RUN --mount=type=cache,target=/root/.npm-production npm ci --ignore-scripts --omit=dev
+RUN npm ci --ignore-scripts --omit=dev
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
